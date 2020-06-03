@@ -1,0 +1,8 @@
+lightdelay:
+  redis:
+    host: "127.0.0.1"
+    port: 3389
+    key: "agentpay_delay"
+  kafka:
+    host: "127.0.0.1"
+    port: 9999

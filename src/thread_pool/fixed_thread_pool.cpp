@@ -1,18 +1,18 @@
-#include "FixedThreadPool.h"
+#include "fixed_thread_pool.h"
 #include <thread>
 
-FixedThreadPool::FixedThreadPool(int pool_size):
+fixed_thread_pool::fixed_thread_pool(int pool_size):
     m_pool_size(pool_size) {
-    m_safe_queue = new SafeQueue();
+    m_safe_queue = new safe_queue();
 }
-void FixedThreadPool::Execute(Runner* runner) {
+void fixed_thread_pool::Execute(Runner* runner) {
     if (m_core_poll.size() < m_pool_size){
         if (AddWorker(runner, true))
             return;
     }
     AddWorker(runner, false);
 }
-int FixedThreadPool::AddWorker(Runner *runner, int is_core) {
+int fixed_thread_pool::AddWorker(Runner *runner, int is_core) {
     retry:
     for(;;){
         if (runner == nullptr && !m_core_poll.empty())

@@ -1,11 +1,11 @@
-#ifndef LIGHTDELAY_SAFEQUEUE_H
-#define LIGHTDELAY_SAFEQUEUE_H
+#ifndef LIGHTDELAY_SAFE_QUEUE_H
+#define LIGHTDELAY_SAFE_QUEUE_H
 #include <mutex>
 #include <queue>
 typedef void(*SafeQueueTask)();
-class SafeQueue {
+class safe_queue {
 public:
-    SafeQueue(){};
+    safe_queue(){};
     int empty();
     int size();
     void push(SafeQueueTask* task);
@@ -15,4 +15,4 @@ private:
     std::queue<SafeQueueTask> m_queue;
     std::mutex m_mutex;
 };
-#endif //LIGHTDELAY_SAFEQUEUE_H
+#endif //LIGHTDELAY_SAFE_QUEUE_H
