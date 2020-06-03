@@ -3,4 +3,5 @@ project(lightdelay)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_subdirectory(src)
+aux_source_directory(src DIR_SRCS)
+add_executable(lightdelay ${DIR_SRCS})
