@@ -3,13 +3,13 @@
 #include <mutex>
 #include <queue>
 typedef void(*SafeQueueTask)();
-class safe_queue {
+class SafeQueue {
 public:
-    safe_queue(){};
-    int empty();
-    int size();
-    void push(SafeQueueTask* task);
-    int get(SafeQueueTask* task);
+    SafeQueue()= default;;
+    int Empty();
+    int Size();
+    void Push(SafeQueueTask* task);
+    int Poll(SafeQueueTask* task);
 
 private:
     std::queue<SafeQueueTask> m_queue;

@@ -1,31 +1,110 @@
 #include "fixed_thread_pool.h"
 #include <thread>
+#include <iostream>
 
-fixed_thread_pool::fixed_thread_pool(int pool_size):
-    m_pool_size(pool_size) {
-    m_safe_queue = new safe_queue();
+FixedThreadPool::Worker::Worker(Runner* runner, FixedThreadPool* threadPool)
+    : m_runner(runner), m_threadPool(threadPool){
+
 }
-void fixed_thread_pool::Execute(Runner* runner) {
-    if (m_core_poll.size() < m_pool_size){
+
+void FixedThreadPool::Worker::Run() {
+    m_threadPool->RunWorker(this);
+}
+FixedThreadPool::FixedThreadPool(unsigned int pool_size)
+    : m_pool_size(pool_size) {
+    // 初始化上下文
+    m_ctl = CtlOf(RUNNING,0);
+    m_worker_queue = new SafeQueue();
+}
+void FixedThreadPool::Execute(Runner* runner) {
+    int wc = WorkerCountOf(m_ctl);
+    std::cout << "wc: " << wc << std::endl;
+    if (wc < m_pool_size){
         if (AddWorker(runner, true))
             return;
     }
-    AddWorker(runner, false);
-}
-int fixed_thread_pool::AddWorker(Runner *runner, int is_core) {
-    retry:
-    for(;;){
-        if (runner == nullptr && !m_core_poll.empty())
-            return 0;
-        i_retry:
-        for (;;){
-            int wc = m_safe_queue->size();
-            if (wc >= (is_core?m_pool_size:1024))
-                return 0;
-
+    if (IsRunning(m_ctl)){
+        m_worker_queue->Push(runner);
+        if (!IsRunning(m_ctl)){
+            //TODO 当状态为非运行时，需要移除队列，并拒绝加入
+        }else if (WorkerCountOf(m_ctl) == 0){
+            AddWorker(nullptr, false);
         }
     }
-
-
+//    AddWorker(runner, false);
+}
+int FixedThreadPool::AddWorker(Runner* runner, int is_core) {
+    for (;;){
+        // 校验状态，并且队列不能为空
+        if ((m_ctl >= SHUTDOWN)
+            && ((m_ctl >= STOP)
+                || runner != nullptr
+                || m_worker_queue->Empty())){
+            return false;
+        }
+        for (;;) {
+            // 判断当前线程数量是否大于额定值
+            if (WorkerCountOf(m_ctl) >= (m_pool_size & COUNT_MASK)){
+                return false;
+            }
+            m_ctl += 1;
+            int wc = WorkerCountOf(m_ctl);
+            std::cout << "-wc: " << wc << std::endl;
+            goto next;
+        }
+    }
+    next:
+    Worker* worker = new Worker(runner,this);
+    if (IsRunning(m_ctl) || ((m_ctl < STOP) && runner == nullptr)){
+        m_workers.push_back(worker);
+        std::thread r(&Worker::Run, worker);
+        r.detach();
+    }
     return 1;
+}
+
+void FixedThreadPool::RunWorker(Worker* worker){
+    Runner* r = worker->m_runner;
+    worker->m_runner = nullptr;
+    while (r != nullptr || GetTask(r)){
+        (*r)();
+        r = nullptr;
+    }
+    m_ctl += -1;
+}
+
+int FixedThreadPool::GetTask(Runner* runner){
+    for (;;){
+        if ((m_ctl >= SHUTDOWN)
+            && ((m_ctl >= STOP)
+                ||m_worker_queue->Empty())){
+            m_ctl += -1;
+            *runner = nullptr;
+            return false;
+        }
+        int wc = WorkerCountOf(m_ctl);
+        int timed = wc > m_pool_size;
+        if (timed && (wc > 1 || m_worker_queue->Empty())) {
+            m_ctl += -1;
+            continue;
+        }
+        Runner r = nullptr;
+        m_worker_queue->Poll(&r);
+        return 0;
+    }
+}
+
+unsigned int FixedThreadPool::RunStateOf(unsigned int c) {
+    return c & ~(COUNT_MASK);
+}
+
+int FixedThreadPool::IsRunning(int c) {
+    return (c < SHUTDOWN);
+}
+
+int FixedThreadPool::CtlOf(int rs,int wc){
+    return (rs | wc);
+}
+int FixedThreadPool::WorkerCountOf(int c){
+    return (c & COUNT_MASK);
 }
