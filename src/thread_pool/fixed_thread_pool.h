@@ -7,6 +7,7 @@
 #include "safe_queue.h"
 #include "vector"
 #include "thread"
+#include "semaphore.h"
 typedef void(*Runner)();
 class FixedThreadPool {
 public:
@@ -20,6 +21,7 @@ private:
         FixedThreadPool* m_threadPool;
         explicit Worker(Runner* runner, FixedThreadPool* threadPool);
         void Run();
+    private:
     };
     unsigned int m_pool_size;
     int m_ctl;
@@ -34,6 +36,9 @@ private:
     // 终止状态。所有的任务都已经终止了
     static const int TIDYING = (2u << COUNT_BITS);
     static const int TERMINATED = (3u << COUNT_BITS);
+    SafeQueue* m_worker_queue;
+    Semaphore* m_semaphore;
+    std::vector<Worker*> m_workers;
     static unsigned int RunStateOf(unsigned int c);
     /**
      * 当前线程池是否正在运行
@@ -54,8 +59,6 @@ private:
      * @return 上下文标记值
      */
     static int CtlOf(int rs, int wc);
-    SafeQueue* m_worker_queue;
-    std::vector<Worker*> m_workers;
     /**
      * 新增工作任务
      * @param runner 执行动作

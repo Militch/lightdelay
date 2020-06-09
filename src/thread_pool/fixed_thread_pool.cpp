@@ -4,7 +4,6 @@
 
 FixedThreadPool::Worker::Worker(Runner* runner, FixedThreadPool* threadPool)
     : m_runner(runner), m_threadPool(threadPool){
-
 }
 
 void FixedThreadPool::Worker::Run() {
@@ -15,10 +14,10 @@ FixedThreadPool::FixedThreadPool(unsigned int pool_size)
     // 初始化上下文
     m_ctl = CtlOf(RUNNING,0);
     m_worker_queue = new SafeQueue();
+    m_semaphore = new Semaphore();
 }
 void FixedThreadPool::Execute(Runner* runner) {
     int wc = WorkerCountOf(m_ctl);
-    std::cout << "wc: " << wc << std::endl;
     if (wc < m_pool_size){
         if (AddWorker(runner, true))
             return;
@@ -31,7 +30,6 @@ void FixedThreadPool::Execute(Runner* runner) {
             AddWorker(nullptr, false);
         }
     }
-//    AddWorker(runner, false);
 }
 int FixedThreadPool::AddWorker(Runner* runner, int is_core) {
     for (;;){
@@ -49,7 +47,6 @@ int FixedThreadPool::AddWorker(Runner* runner, int is_core) {
             }
             m_ctl += 1;
             int wc = WorkerCountOf(m_ctl);
-            std::cout << "-wc: " << wc << std::endl;
             goto next;
         }
     }
@@ -57,18 +54,24 @@ int FixedThreadPool::AddWorker(Runner* runner, int is_core) {
     Worker* worker = new Worker(runner,this);
     if (IsRunning(m_ctl) || ((m_ctl < STOP) && runner == nullptr)){
         m_workers.push_back(worker);
+        worker->Run();
         std::thread r(&Worker::Run, worker);
-        r.detach();
+//        if (r.joinable()){
+//            r.join();
+//        }
     }
     return 1;
 }
 
 void FixedThreadPool::RunWorker(Worker* worker){
-    Runner* r = worker->m_runner;
+    void (*r)() = *worker->m_runner;
     worker->m_runner = nullptr;
-    while (r != nullptr || GetTask(r)){
-        (*r)();
+    m_semaphore->Notify();
+    while (r != nullptr || GetTask(&r)){
+        m_semaphore->Wait();
+        r();
         r = nullptr;
+        m_semaphore->Notify();
     }
     m_ctl += -1;
 }
@@ -88,9 +91,14 @@ int FixedThreadPool::GetTask(Runner* runner){
             m_ctl += -1;
             continue;
         }
-        Runner r = nullptr;
+        void (*r)() = nullptr;
         m_worker_queue->Poll(&r);
-        return 0;
+        if (r == nullptr){
+            *runner = nullptr;
+            return false;
+        }
+        *runner = r;
+        return true;
     }
 }
 
