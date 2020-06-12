@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include "thread_pool/fixed_thread_pool.h"
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
@@ -6,6 +7,7 @@
 #include "thread_pool/safe_queue.h"
 #include "thread_pool/semaphore.h"
 #include "librdkafka/rdkafkacpp.h"
+#include "win32/wingetopt.h"
 void r1(){
     std::cout << "r1_start" << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
@@ -67,39 +69,130 @@ public:
                       message.offset() << std::endl;
     }
 };
-int main() {
-    std::string brokers = "abc";
-    std::string errstr;
-    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-    RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
-    if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
-        spdlog::error("Set kafka config bootstrap.servers error: {}", errstr);
-        return 1;
-    }
-    signal(SIGINT, sigterm);
-    signal(SIGTERM, sigterm);
 
-    ExampleDeliveryReportCb ex_dr_cb;
 
-    if (conf->set("dr_cb", &ex_dr_cb, errstr) != RdKafka::Conf::CONF_OK) {
-        std::cerr << errstr << std::endl;
-        exit(1);
-    }
+class ExampleEventCb : public RdKafka::EventCb {
+public:
+    void event_cb (RdKafka::Event &event) {
+        switch (event.type())
+        {
+            case RdKafka::Event::EVENT_ERROR:
+                if (event.fatal()) {
+                    std::cerr << "FATAL ";
+                    run = 0;
+                }
+                std::cerr << "ERROR (" << RdKafka::err2str(event.err()) << "): " <<
+                          event.str() << std::endl;
+                break;
 
-    
-    RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
-    if (!producer) {
-        spdlog::error("Failed to create kafka producer: {}", errstr);
-        return 1;
-    }
-    delete conf;
-    for (std::string line; run && std::getline(std::cin, line);) {
-        if (line.empty()) {
-            spdlog::error("line is empty", brokers);
-            producer->poll(0);
-            continue;
+            case RdKafka::Event::EVENT_STATS:
+                std::cerr << "\"STATS\": " << event.str() << std::endl;
+                break;
+
+            case RdKafka::Event::EVENT_LOG:
+                spdlog::error("{}", event.str().c_str());
+                break;
+
+            default:
+                std::cerr << "EVENT " << event.type() <<
+                          " (" << RdKafka::err2str(event.err()) << "): " <<
+                          event.str() << std::endl;
+                break;
         }
     }
+};
+void commandGuid(int argc, char **argv){
+    fprintf(stdout,
+            "Usage: %s [-c|--config <path>]\n"
+            "       %s [-v|--version]\n"
+            "       %s [-h|--help]\n"
+            "\n"
+            "Options:\n"
+            "  -c, --config FILE      Config file path\n"
+            "                         (default: lightdelay.yml)\n"
+            "  -v, --version          Print package version\n"
+            "  -h, --help             Show command guid\n"
+            , argv[0],argv[0],argv[0]);
+}
+int main(int argc, char **argv) {
+    int opt;
+    char *configPath = nullptr;
+    while ((opt = getopt(argc, argv, "cvh")) != -1) {
+        switch (opt) {
+            case 'c':
+                std::cout << "abc: " << opt << std::endl;
+                configPath = "abc";
+                break;
+            case 'h':
+            default:
+                commandGuid(argc,argv);
+                return 0;
+        }
+    }
+    if (configPath == nullptr){
+        configPath = "./lightdelay.yml";
+    }
+    retry:
+    std::ifstream fin(configPath);
+    if (!fin && strcmp(configPath,"./config/lightdelay.yml") != 0){
+        configPath = "./config/lightdelay.yml";
+        goto retry;
+    }else if(strcmp(configPath,"./config/lightdelay.yml") == 0) {
+        configPath = nullptr;
+    }
+    if (configPath == nullptr){
+        commandGuid(argc,argv);
+        return 0;
+    }
+
+//    commandGuid(argc,argv);
+
+//    std::string brokers = "localhost:9093";
+//    const char *topic = "test";
+//    std::string errstr;
+//    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+//    RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
+//    if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
+//        spdlog::error("Set kafka config bootstrap.servers error: {}", errstr);
+//        return 1;
+//    }
+//    ExampleEventCb ex_event_cb;
+//    conf->set("event_cb", &ex_event_cb, errstr);
+//
+//    signal(SIGINT, sigterm);
+//    signal(SIGTERM, sigterm);
+//
+//    ExampleDeliveryReportCb ex_dr_cb;
+//
+//    if (conf->set("dr_cb", &ex_dr_cb, errstr) != RdKafka::Conf::CONF_OK) {
+//        std::cerr << errstr << std::endl;
+//        exit(1);
+//    }
+//
+//
+//    RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
+//    if (!producer) {
+//        spdlog::error("Failed to create kafka producer: {}", errstr);
+//        return 1;
+//    }
+//    delete conf;
+//    for (std::string line; run && std::getline(std::cin, line);) {
+//        if (line.empty()) {
+//            spdlog::error("line is empty");
+//            producer->poll(0);
+//            continue;
+//        }
+//        RdKafka::ErrorCode err = producer->produce(
+//                topic,  RdKafka::Topic::PARTITION_UA,
+//                RdKafka::Producer::RK_MSG_COPY, const_cast<char *>(line.c_str()),
+//                line.size(), NULL, 0,0,NULL,NULL);
+//        if (err != RdKafka::ERR_NO_ERROR){
+//            spdlog::error("Failed to produce to topic: {}, error: {}",topic, RdKafka::err2str(err));
+//        }
+//        producer->poll(0);
+//    }
+//    producer->flush(10*1000 /* wait for max 10 seconds */);
+//    delete producer;
     const char *host = "192.168.1.1";
 
 //    const char *host = "127.0.0.1";
