@@ -12,6 +12,7 @@ typedef void(*Runner)();
 class FixedThreadPool {
 public:
     explicit FixedThreadPool(unsigned int pool_size);
+    ~FixedThreadPool();
     void Execute(Runner* runner);
 private:
     class Worker {
@@ -21,7 +22,6 @@ private:
         FixedThreadPool* m_threadPool;
         explicit Worker(Runner* runner, FixedThreadPool* threadPool);
         void Run();
-    private:
     };
     unsigned int m_pool_size;
     int m_ctl;
@@ -38,7 +38,7 @@ private:
     static const int TERMINATED = (3u << COUNT_BITS);
     SafeQueue* m_worker_queue;
     Semaphore* m_semaphore;
-    std::vector<Worker*> m_workers;
+    std::vector<std::thread> m_workers_t;
     static unsigned int RunStateOf(unsigned int c);
     /**
      * 当前线程池是否正在运行

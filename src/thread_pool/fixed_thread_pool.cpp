@@ -46,19 +46,13 @@ int FixedThreadPool::AddWorker(Runner* runner, int is_core) {
                 return false;
             }
             m_ctl += 1;
-            int wc = WorkerCountOf(m_ctl);
             goto next;
         }
     }
     next:
     Worker* worker = new Worker(runner,this);
     if (IsRunning(m_ctl) || ((m_ctl < STOP) && runner == nullptr)){
-        m_workers.push_back(worker);
-        worker->Run();
-        std::thread r(&Worker::Run, worker);
-//        if (r.joinable()){
-//            r.join();
-//        }
+        m_workers_t.emplace_back(&Worker::Run, worker);
     }
     return 1;
 }
@@ -66,6 +60,7 @@ int FixedThreadPool::AddWorker(Runner* runner, int is_core) {
 void FixedThreadPool::RunWorker(Worker* worker){
     void (*r)() = *worker->m_runner;
     worker->m_runner = nullptr;
+    delete worker;
     m_semaphore->Notify();
     while (r != nullptr || GetTask(&r)){
         m_semaphore->Wait();
@@ -115,4 +110,10 @@ int FixedThreadPool::CtlOf(int rs,int wc){
 }
 int FixedThreadPool::WorkerCountOf(int c){
     return (c & COUNT_MASK);
+}
+
+FixedThreadPool::~FixedThreadPool() {
+    m_semaphore->Notify();
+    for(std::thread &worker: m_workers_t)
+        worker.join();
 }

@@ -8,10 +8,12 @@
 #include "thread_pool/semaphore.h"
 #include "librdkafka/rdkafkacpp.h"
 #include "win32/wingetopt.h"
+#include "ini/cpp/INIReader.h"
 void r1(){
-    std::cout << "r1_start" << std::endl;
+
+    spdlog::error("r1 start");
     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-    std::cout << "r1_end" << std::endl;
+    spdlog::error("r1 end");
 }
 void r2(){
     std::cout << "r2_start" << std::endl;
@@ -103,25 +105,47 @@ public:
 };
 void commandGuid(int argc, char **argv){
     fprintf(stdout,
-            "Usage: %s [-c|--config <path>]\n"
-            "       %s [-v|--version]\n"
-            "       %s [-h|--help]\n"
+            "Usage: %s -c <path>\n"
+            "       %s -v\n"
+            "       %s -h\n"
             "\n"
             "Options:\n"
-            "  -c, --config FILE      Config file path\n"
-            "                         (default: lightdelay.yml)\n"
-            "  -v, --version          Print package version\n"
-            "  -h, --help             Show command guid\n"
+            "  -c FILE      Config file path\n"
+            "               (default: lightdelay.ini)\n"
+            "  -v           Print package version\n"
+            "  -h           Show command guid\n"
             , argv[0],argv[0],argv[0]);
 }
+
+int loadConfigFile(const char *configFilePath){
+    if (configFilePath != nullptr){
+        std::ifstream fin(configFilePath);
+
+        return !!fin;
+    }
+    return false;
+}
+class Democ {
+public:
+    Democ(){
+        std::cout << "Constructor" << std::endl;
+    };
+    ~Democ(){
+
+        std::cout << "Constructor2" << std::endl;
+    }
+    void DoPrint(){
+        std::cout << "DoPrint" << std::endl;
+    };
+};
 int main(int argc, char **argv) {
     int opt;
-    char *configPath = nullptr;
+    std::string configFilePath;
     while ((opt = getopt(argc, argv, "cvh")) != -1) {
         switch (opt) {
             case 'c':
                 std::cout << "abc: " << opt << std::endl;
-                configPath = "abc";
+                configFilePath = "abc";
                 break;
             case 'h':
             default:
@@ -129,22 +153,30 @@ int main(int argc, char **argv) {
                 return 0;
         }
     }
-    if (configPath == nullptr){
-        configPath = "./lightdelay.yml";
+    configFilePath = "./lightdelay.ini";
+    INIReader reader(configFilePath);
+    if (reader.ParseError() != 0){
+        spdlog::error("Can't load '{}'", configFilePath);
     }
-    retry:
-    std::ifstream fin(configPath);
-    if (!fin && strcmp(configPath,"./config/lightdelay.yml") != 0){
-        configPath = "./config/lightdelay.yml";
-        goto retry;
-    }else if(strcmp(configPath,"./config/lightdelay.yml") == 0) {
-        configPath = nullptr;
-    }
-    if (configPath == nullptr){
-        commandGuid(argc,argv);
-        return 0;
-    }
+    std::string redisHost = reader.Get("redis","host","127.0.0.1");
+    int redisPort = reader.GetInteger("redis","port",6379);
+    std::string kafkaHost = reader.Get("kafka","host","127.0.0.1");
+    std::string kafkaPort = reader.Get("kafka","port","9093");
 
+//    FixedThreadPool *fixedThreadPool = new FixedThreadPool(64);
+//    void (*rr1)() = r1;
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    fixedThreadPool->Execute(&rr1);
+//    delete fixedThreadPool;
 //    commandGuid(argc,argv);
 
 //    std::string brokers = "localhost:9093";
@@ -193,18 +225,16 @@ int main(int argc, char **argv) {
 //    }
 //    producer->flush(10*1000 /* wait for max 10 seconds */);
 //    delete producer;
-    const char *host = "192.168.1.1";
 
-//    const char *host = "127.0.0.1";
-//    redisContext *redisContext = redisConnect(host, 6379);
-//    if (redisContext == nullptr || redisContext->err) {
-//        if (redisContext) {
-//            spdlog::error("Connect redis error: {}", redisContext->errstr);
-//            return 0;
-//        } else {
-//            spdlog::error("Can't allocate redis context");
-//            return 0;
-//        }
-//    }
+    redisContext *redisContext = redisConnect(redisHost.c_str(), redisPort);
+    if (redisContext == nullptr || redisContext->err) {
+        if (redisContext) {
+            spdlog::error("Connect redis error: {}", redisContext->errstr);
+            return 0;
+        } else {
+            spdlog::error("Can't allocate redis context");
+            return 0;
+        }
+    }
     return 0;
 }

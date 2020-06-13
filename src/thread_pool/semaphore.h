@@ -11,6 +11,7 @@
 class Semaphore {
 public:
     void Notify();
+    void NotifyAll();
     void Wait();
 private:
     std::mutex m_mutex;
