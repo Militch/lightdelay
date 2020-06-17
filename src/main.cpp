@@ -1,5 +1,7 @@
 #include <iostream>
 #include <fstream>
+#include <chrono>
+#include <string>
 #include "thread_pool/fixed_thread_pool.h"
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
@@ -9,16 +11,17 @@
 #include "librdkafka/rdkafkacpp.h"
 #include "win32/wingetopt.h"
 #include "ini/cpp/INIReader.h"
+#include "util/timeutil.h"
+#include "redis_consumer.h"
 void r1(){
-
     spdlog::error("r1 start");
     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     spdlog::error("r1 end");
 }
-void r2(){
-    std::cout << "r2_start" << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-    std::cout << "r2_end" << std::endl;
+void r2(char *abc){
+    char *def = "def";
+    strcpy(abc,def);
+//    std::strcpy(abc,def);
 }
 void r3(){
     std::cout << "r3_start" << std::endl;
@@ -103,11 +106,12 @@ public:
         }
     }
 };
+
+
 void commandGuid(int argc, char **argv){
     fprintf(stdout,
-            "Usage: %s -c <path>\n"
-            "       %s -v\n"
-            "       %s -h\n"
+            "Usage: %s [-c <path>]\n"
+            "       %s -v | -h\n"
             "\n"
             "Options:\n"
             "  -c FILE      Config file path\n"
@@ -125,23 +129,10 @@ int loadConfigFile(const char *configFilePath){
     }
     return false;
 }
-class Democ {
-public:
-    Democ(){
-        std::cout << "Constructor" << std::endl;
-    };
-    ~Democ(){
-
-        std::cout << "Constructor2" << std::endl;
-    }
-    void DoPrint(){
-        std::cout << "DoPrint" << std::endl;
-    };
-};
 int main(int argc, char **argv) {
     int opt;
     std::string configFilePath;
-    while ((opt = getopt(argc, argv, "cvh")) != -1) {
+    while ((opt = getopt(argc, argv, "c:vh")) != -1) {
         switch (opt) {
             case 'c':
                 std::cout << "abc: " << opt << std::endl;
@@ -160,9 +151,10 @@ int main(int argc, char **argv) {
     }
     std::string redisHost = reader.Get("redis","host","127.0.0.1");
     int redisPort = reader.GetInteger("redis","port",6379);
+    std::string redisListenKeys = reader.Get("redis","listen_keys","lightdelay_default");
     std::string kafkaHost = reader.Get("kafka","host","127.0.0.1");
     std::string kafkaPort = reader.Get("kafka","port","9093");
-
+//    char script[255];
 //    FixedThreadPool *fixedThreadPool = new FixedThreadPool(64);
 //    void (*rr1)() = r1;
 //    fixedThreadPool->Execute(&rr1);
@@ -226,15 +218,16 @@ int main(int argc, char **argv) {
 //    producer->flush(10*1000 /* wait for max 10 seconds */);
 //    delete producer;
 
-    redisContext *redisContext = redisConnect(redisHost.c_str(), redisPort);
-    if (redisContext == nullptr || redisContext->err) {
-        if (redisContext) {
-            spdlog::error("Connect redis error: {}", redisContext->errstr);
-            return 0;
-        } else {
-            spdlog::error("Can't allocate redis context");
-            return 0;
+    RedisConsumer *consumer = new RedisConsumer(redisHost.c_str(),redisPort);
+    if(consumer->connect()){
+        while (true){
+            char buf[255];
+            if (consumer->poll(redisListenKeys.c_str(), buf,1000)){
+                std::string c = buf;
+                spdlog::error("r: {}", c);
+            }
         }
     }
+    delete consumer;
     return 0;
 }

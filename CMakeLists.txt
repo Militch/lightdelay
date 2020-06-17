@@ -6,6 +6,7 @@ aux_source_directory(src/thread_pool DIR_SRCS_TP)
 aux_source_directory(src/win32 DIR_SRCS_WIN32)
 aux_source_directory(src/ini DIR_SRCS_INI)
 aux_source_directory(src/ini/cpp DIR_SRCS_INI_CPP)
+aux_source_directory(src/util DIR_SRCS_UTIL)
 add_subdirectory(3rdparty)
 include_directories(include)
 find_package(hiredis)
@@ -27,6 +28,7 @@ add_executable(
         ${DIR_SRCS_WIN32}
         ${DIR_SRCS_INI}
         ${DIR_SRCS_INI_CPP}
+        ${DIR_SRCS_UTIL}
 )
 
 target_link_libraries(
