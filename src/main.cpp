@@ -56,9 +56,13 @@ void r10(){
     std::cout << "r10" << std::endl;
 }
 
-static volatile sig_atomic_t run = 1;
-static void sigterm (int sig) {
-    run = 0;
+//static volatile sig_atomic_t run = 1;
+int run = 1;
+void sigHandler (int sig) {
+    if (sig == SIGINT){
+        run = 0;
+        spdlog::error("sigint: {}", sig);
+    }
 }
 
 class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
@@ -124,7 +128,6 @@ void commandGuid(int argc, char **argv){
 int loadConfigFile(const char *configFilePath){
     if (configFilePath != nullptr){
         std::ifstream fin(configFilePath);
-
         return !!fin;
     }
     return false;
@@ -183,8 +186,8 @@ int main(int argc, char **argv) {
 //    ExampleEventCb ex_event_cb;
 //    conf->set("event_cb", &ex_event_cb, errstr);
 //
-//    signal(SIGINT, sigterm);
-//    signal(SIGTERM, sigterm);
+    signal(SIGINT, sigHandler);
+    signal(SIGTERM, sigHandler);
 //
 //    ExampleDeliveryReportCb ex_dr_cb;
 //
@@ -220,7 +223,7 @@ int main(int argc, char **argv) {
 
     RedisConsumer *consumer = new RedisConsumer(redisHost.c_str(),redisPort);
     if(consumer->connect()){
-        while (true){
+        while (run){
             char buf[255];
             if (consumer->poll(redisListenKeys.c_str(), buf,1000)){
                 std::string c = buf;
